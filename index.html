@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>STEELIC FORUM — 데몬리스트</title>
+<title>ACACIAN FORUM — 데몬리스트</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -374,12 +374,12 @@
 <body>
 
 <nav class="nav">
-  <div class="nav-brand">STEELIC FORUM</div>
+  <div class="nav-brand">ACACIAN FORUM</div>
   <div class="nav-right">
     <div class="nav-tabs">
       <button class="nav-tab active" type="button" id="tab-levels" onclick="switchView('levels')">데몬리스트</button>
       <button class="nav-tab" type="button" id="tab-ranking" onclick="switchView('ranking')">유저랭킹</button>
-      <button class="nav-tab" type="button">디스코드 서버 ↗</button>
+      <a class="nav-tab" href="https://discord.gg/u43hxe2hjk" target="_blank" rel="noopener noreferrer">디스코드 서버 ↗</a>
     </div>
     <div class="nav-auth">
       <span id="admin-status" class="admin-status" style="display:none;">관리자 모드</span>
@@ -390,9 +390,9 @@
 </nav>
 
 <header class="hero">
-  <div class="hero-eyebrow">Steelic Forum</div>
+  <div class="hero-eyebrow">Acacian Forum</div>
   <h1 id="hero-title">데몬리스트</h1>
-  <p id="hero-desc">Geometry Dash 유저들의 클리어 기록을 모아, 가장 어려운 맵부터 순서대로 나열합니다.</p>
+  <p id="hero-desc">스티릭 서버의 등재신청 채널에서 기록을 받고 있습니다. 아무리 늦어도 며칠 내로 등재됩니다.</p>
 </header>
 
 <svg class="spike-ground" viewBox="0 0 400 20" preserveAspectRatio="none">
@@ -784,7 +784,7 @@
       tabRanking.classList.remove('active');
       tabLevels.classList.add('active');
       heroTitle.textContent = '데몬리스트';
-      heroDesc.textContent = 'Geometry Dash 유저들의 클리어 기록을 모아, 가장 어려운 맵부터 순서대로 나열합니다.';
+      heroDesc.textContent = '스티릭 서버의 등재신청 채널에서 기록을 받고 있습니다. 아무리 늦어도 며칠 내로 등재됩니다.';
     }
   }
 

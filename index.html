@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STEELIC FORUM — 데몬리스트</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg: #0e0918;
+    --surface: #170f26;
+    --surface-2: #1e1533;
+    --border: #362a52;
+    --text: #f3ecff;
+    --muted: #9a8cbd;
+    --magenta: #ff2ec4;
+    --cyan: #23e6ff;
+    --amber: #ffc857;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family:'Rajdhani', sans-serif;
+    font-weight:500;
+    min-height:100vh;
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(255,46,196,0.10), transparent 45%),
+      radial-gradient(circle at 85% 15%, rgba(35,230,255,0.10), transparent 40%);
+  }
+
+  /* ---------- Nav ---------- */
+  .nav{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 18px 28px;
+    border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:20;
+    background: rgba(14,9,24,0.85);
+    backdrop-filter: blur(8px);
+    flex-wrap: wrap; row-gap: 10px;
+  }
+  .nav-brand{
+    font-family:'JetBrains Mono', monospace;
+    font-size:13px; letter-spacing:0.18em; color:var(--muted);
+    text-transform:uppercase;
+  }
+  .nav-right{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .nav-tabs{ display:flex; gap:6px; }
+  .nav-tab{
+    font-family:'Rajdhani', sans-serif;
+    font-weight:700; font-size:14px; letter-spacing:0.04em;
+    color:var(--muted); background:transparent; border:1px solid transparent;
+    padding:8px 14px; border-radius:6px; cursor:pointer;
+    display:flex; align-items:center; gap:6px;
+    transition: color .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .nav-tab.active{
+    color: var(--bg);
+    background: linear-gradient(120deg, var(--magenta), var(--cyan));
+    border-color: transparent;
+  }
+  .nav-tab:not(.active):hover{
+    color: var(--text);
+    border-color: var(--border);
+  }
+  .nav-auth{ display:flex; align-items:center; gap:10px; }
+  .admin-status{
+    font-family:'JetBrains Mono', monospace; font-size:12px;
+    color: var(--amber); letter-spacing:0.08em; text-transform:uppercase;
+    display:flex; align-items:center; gap:6px;
+  }
+  .admin-status::before{
+    content:''; width:7px; height:7px; border-radius:50%; background: var(--amber);
+    display:inline-block;
+  }
+
+  /* ---------- Hero ---------- */
+  .hero{ padding: 56px 28px 0; text-align:center; }
+  .hero-eyebrow{
+    font-family:'JetBrains Mono', monospace;
+    font-size:13px; letter-spacing:0.3em; text-transform:uppercase;
+    color: var(--muted);
+  }
+  .hero h1{
+    margin: 10px 0 6px;
+    font-size: clamp(38px, 8vw, 68px);
+    font-weight:700; text-transform:uppercase; letter-spacing:0.02em;
+    background: linear-gradient(100deg, var(--magenta) 10%, var(--amber) 50%, var(--cyan) 90%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    line-height:1.02;
+  }
+  .hero p{
+    margin: 0 auto; max-width: 520px;
+    color: var(--muted); font-size:16px; font-weight:500;
+  }
+
+  /* Spike ground divider — signature element */
+  .spike-ground{ display:block; width:100%; height:34px; margin-top:34px; }
+  .spike-ground path{ fill: var(--surface); }
+
+  /* ---------- List ---------- */
+  .wrap{ max-width: 760px; margin: 0 auto; padding: 0 20px 80px; }
+
+  .toolbar{
+    display:none; gap:10px; justify-content:flex-end;
+    padding: 26px 4px 0;
+    flex-wrap: wrap;
+  }
+  .btn{
+    font-family:'Rajdhani', sans-serif; font-weight:700; font-size:14px;
+    letter-spacing:0.02em; cursor:pointer;
+    padding: 10px 16px; border-radius:8px;
+    border:1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    display:flex; align-items:center; gap:6px;
+    transition: border-color .15s ease, transform .1s ease;
+  }
+  .btn:hover{ border-color:#4a3a70; }
+  .btn:active{ transform: scale(0.97); }
+  .btn-primary{
+    background: linear-gradient(120deg, var(--magenta), var(--cyan));
+    color: var(--bg); border-color:transparent;
+  }
+
+  .list-head{
+    display:flex; justify-content:space-between; align-items:baseline;
+    padding: 22px 4px 14px;
+    color: var(--muted); font-family:'JetBrains Mono', monospace;
+    font-size:12px; letter-spacing:0.12em; text-transform:uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .level{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-top: 14px;
+    overflow: hidden;
+    transition: border-color .15s ease;
+  }
+  .level:hover{ border-color:#4a3a70; }
+
+  .level-row{
+    display:flex; align-items:center; gap:18px;
+    padding: 16px 18px;
+    cursor:pointer;
+    user-select:none;
+  }
+
+  .rank-badge{
+    position:relative;
+    flex:0 0 52px; height:52px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius: 10px;
+    font-family:'JetBrains Mono', monospace;
+    font-weight:600; font-size:16px; color: var(--bg);
+  }
+
+  .level-name-block{ flex:1; min-width:0; }
+  .level-name{
+    font-size: 19px; font-weight:700; letter-spacing:0.01em;
+    color: var(--text);
+    display:flex; align-items:center; gap:8px;
+  }
+  .level-name:hover{ color: var(--cyan); }
+  .level-creator{
+    font-size: 13px; color: var(--muted);
+    font-family:'JetBrains Mono', monospace;
+    margin-top: 2px;
+  }
+
+  .chevron{
+    flex:0 0 auto; width:22px; height:22px; color: var(--muted);
+    transition: transform .2s ease;
+  }
+  .level.open .chevron{ transform: rotate(180deg); color: var(--cyan); }
+
+  .level-actions{ display:flex; align-items:center; gap:6px; flex:0 0 auto; }
+
+  .icon-btn{
+    flex:0 0 auto; width:30px; height:30px; border-radius:7px;
+    display:flex; align-items:center; justify-content:center;
+    background: var(--surface-2); border:1px solid var(--border);
+    color: var(--muted); cursor:pointer; padding:0;
+    transition: color .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .icon-btn svg{ width:15px; height:15px; }
+  .icon-btn:hover{ color: var(--text); border-color:#4a3a70; }
+  .icon-btn.danger:hover{ color: var(--magenta); border-color: rgba(255,46,196,0.4); }
+  .icon-btn.youtube{ color:#ff3b3b; }
+  .icon-btn.youtube:hover{ background: rgba(255,59,59,0.12); border-color: rgba(255,59,59,0.4); }
+
+  /* ---------- Clear panel ---------- */
+  .clear-panel{
+    max-height:0; overflow:hidden;
+    transition: max-height .28s ease;
+    border-top: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .level.open .clear-panel{ max-height: 800px; }
+
+  .clear-panel-inner{ padding: 6px 18px 16px; }
+  .clear-panel-label{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px; letter-spacing:0.14em; text-transform:uppercase;
+    color: var(--muted); padding: 12px 0 8px;
+  }
+
+  .clearer{
+    display:flex; align-items:flex-start; gap:12px;
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+  }
+  .clearer:first-of-type{ border-top:none; }
+
+  .device-icon{
+    flex:0 0 28px; height:28px; width:28px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:6px; background:var(--surface);
+    border:1px solid var(--border); color: var(--amber);
+    margin-top: 2px;
+  }
+  .device-icon svg{ width:15px; height:15px; }
+
+  .clearer-main{ flex:1; min-width:0; }
+  .clearer-top{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .clearer-name{ font-weight:700; font-size:15px; }
+  .clearer-device{
+    font-family:'JetBrains Mono', monospace; font-size:11px;
+    color: var(--muted); letter-spacing:0.06em; text-transform:uppercase;
+  }
+  .clearer-detail{
+    font-size: 13px; color: var(--muted); margin-top:4px;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .clearer-actions{
+    flex:0 0 auto; display:flex; align-items:center; gap:6px; margin-left:auto;
+  }
+
+  .empty-state{
+    padding: 20px 0 8px; text-align:center;
+    color: var(--muted); font-size:14px;
+  }
+
+  /* ---------- Ranking ---------- */
+  .rank-row{
+    display:flex; align-items:center; gap:16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-top: 12px;
+    padding: 14px 18px;
+    transition: border-color .15s ease;
+  }
+  .rank-row:hover{ border-color:#4a3a70; }
+  .rank-position{
+    flex:0 0 44px; text-align:center;
+    font-family:'JetBrains Mono', monospace;
+    font-weight:600; font-size:16px; color: var(--muted);
+  }
+  .rank-position.top1{ color: var(--amber); font-size:19px; }
+  .rank-position.top2{ color: #d8d8e6; font-size:18px; }
+  .rank-position.top3{ color: #e6a877; font-size:18px; }
+  .rank-user-name{
+    flex:1; min-width:0;
+    font-size:18px; font-weight:700; cursor:pointer;
+    background:none; border:none; color: var(--text);
+    text-align:left; padding:0; font-family:'Rajdhani', sans-serif;
+  }
+  .rank-user-name:hover{ color: var(--cyan); }
+  .rank-score{
+    flex:0 0 auto; font-family:'JetBrains Mono', monospace;
+    font-weight:600; font-size:15px;
+    color: var(--cyan);
+  }
+
+  /* ---------- Profile Modal ---------- */
+  .profile-modal{ max-width: 440px; }
+  .profile-header{
+    display:flex; align-items:center; gap:14px;
+    padding-bottom: 16px; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .profile-rank{
+    flex:0 0 54px; height:54px; border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    background: var(--surface-2); border:1px solid var(--border);
+    font-family:'JetBrains Mono', monospace; font-weight:600; font-size:16px;
+    color: var(--amber);
+  }
+  .profile-name{ font-size:22px; font-weight:700; }
+  .profile-score{
+    font-family:'JetBrains Mono', monospace; font-size:14px;
+    color: var(--cyan); margin-top:2px;
+  }
+  .profile-clear-list{ max-height: 320px; overflow-y:auto; margin-top:4px; }
+  .profile-clear-row{
+    display:flex; align-items:center; gap:10px;
+    padding: 10px 0; border-top:1px solid var(--border);
+  }
+  .profile-clear-row:first-child{ border-top:none; }
+  .profile-clear-name{ flex:1; min-width:0; font-weight:700; font-size:15px; }
+  .profile-clear-rank{
+    flex:0 0 auto; font-family:'JetBrains Mono', monospace;
+    font-size:12px; color: var(--muted);
+  }
+  .profile-clear-points{
+    flex:0 0 auto; font-family:'JetBrains Mono', monospace;
+    font-size:12px; color: var(--amber);
+  }
+
+  /* ---------- Modal ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; z-index:50;
+    background: rgba(6,4,12,0.72);
+    backdrop-filter: blur(3px);
+    display:none; align-items:center; justify-content:center;
+    padding: 20px;
+  }
+  .modal-overlay.open{ display:flex; }
+  .modal{
+    width:100%; max-width: 420px;
+    background: var(--surface);
+    border:1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .modal h2{
+    margin:0 0 4px; font-size:22px; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.02em;
+  }
+  .modal-sub{
+    margin:0 0 18px; font-size:13px; color:var(--muted);
+  }
+  .field{ margin-bottom:14px; }
+  .field label{
+    display:block; font-family:'JetBrains Mono', monospace;
+    font-size:11px; letter-spacing:0.1em; text-transform:uppercase;
+    color: var(--muted); margin-bottom:6px;
+  }
+  .field input, .field select, .field textarea{
+    width:100%; background: var(--surface-2);
+    border:1px solid var(--border); border-radius:8px;
+    padding: 10px 12px; color: var(--text);
+    font-family:'Rajdhani', sans-serif; font-size:15px; font-weight:600;
+    outline:none;
+  }
+  .field textarea{ resize:vertical; min-height:64px; font-weight:500; }
+  .field input:focus, .field select:focus, .field textarea:focus{
+    border-color: var(--cyan);
+  }
+  .field-hint{ font-size:12px; color:var(--muted); margin-top:5px; }
+  .modal-actions{
+    display:flex; justify-content:flex-end; gap:8px; margin-top:20px;
+  }
+  .modal-error{
+    color: var(--magenta); font-size:13px; margin-top:-6px; margin-bottom:12px;
+    display:none;
+  }
+  .modal-error.show{ display:block; }
+
+  @media (max-width: 520px){
+    .rank-badge{ flex-basis:44px; height:44px; font-size:14px; }
+    .toolbar.open-flex{ justify-content:stretch; }
+    .toolbar .btn{ flex:1; justify-content:center; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">STEELIC FORUM</div>
+  <div class="nav-right">
+    <div class="nav-tabs">
+      <button class="nav-tab active" type="button" id="tab-levels" onclick="switchView('levels')">데몬리스트</button>
+      <button class="nav-tab" type="button" id="tab-ranking" onclick="switchView('ranking')">유저랭킹</button>
+      <button class="nav-tab" type="button">디스코드 서버 ↗</button>
+    </div>
+    <div class="nav-auth">
+      <span id="admin-status" class="admin-status" style="display:none;">관리자 모드</span>
+      <button id="login-btn" class="btn" type="button" onclick="openLoginModal()">관리자 로그인</button>
+      <button id="logout-btn" class="btn" type="button" style="display:none;" onclick="logout()">로그아웃</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="hero-eyebrow">Steelic Forum</div>
+  <h1 id="hero-title">데몬리스트</h1>
+  <p id="hero-desc">Geometry Dash 유저들의 클리어 기록을 모아, 가장 어려운 맵부터 순서대로 나열합니다.</p>
+</header>
+
+<svg class="spike-ground" viewBox="0 0 400 20" preserveAspectRatio="none">
+  <path d="M0,20 L0,10 L10,20 L20,10 L30,20 L40,10 L50,20 L60,10 L70,20 L80,10 L90,20 L100,10 L110,20 L120,10 L130,20 L140,10 L150,20 L160,10 L170,20 L180,10 L190,20 L200,10 L210,20 L220,10 L230,20 L240,10 L250,20 L260,10 L270,20 L280,10 L290,20 L300,10 L310,20 L320,10 L330,20 L340,10 L350,20 L360,10 L370,20 L380,10 L390,20 L400,10 L400,20 Z"></path>
+</svg>
+
+<main class="wrap">
+  <div id="levels-view">
+    <div class="toolbar" id="toolbar">
+      <button class="btn" type="button" onclick="openAddLevelModal()">+ 새 맵 추가</button>
+      <button class="btn btn-primary" type="button" onclick="openAddClearModal()">+ 새 클리어 추가</button>
+    </div>
+
+    <div class="list-head">
+      <span>맵</span>
+      <span>클리어 목록 보기 →</span>
+    </div>
+
+    <div id="level-list"></div>
+  </div>
+
+  <div id="ranking-view" style="display:none;">
+    <div class="list-head">
+      <span>순위</span>
+      <span>점수</span>
+    </div>
+    <div id="ranking-list"></div>
+  </div>
+</main>
+
+<!-- 관리자 로그인 모달 -->
+<div class="modal-overlay" id="login-modal-overlay">
+  <div class="modal">
+    <h2>관리자 로그인</h2>
+    <p class="modal-sub">관리자 계정으로 로그인하면 맵/클리어 추가·삭제, 닉네임 변경이 가능합니다.</p>
+    <div class="modal-error" id="login-modal-error"></div>
+    <div class="field">
+      <label for="login-email">이메일</label>
+      <input type="email" id="login-email" placeholder="admin@example.com">
+    </div>
+    <div class="field">
+      <label for="login-password">비밀번호</label>
+      <input type="password" id="login-password">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" type="button" onclick="closeLoginModal()">취소</button>
+      <button class="btn btn-primary" type="button" onclick="submitLogin()">로그인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 새 맵 추가 모달 -->
+<div class="modal-overlay" id="level-modal-overlay">
+  <div class="modal">
+    <h2>새 맵 추가</h2>
+    <p class="modal-sub">데몬리스트에 새로운 맵을 등록합니다.</p>
+    <div class="modal-error" id="level-modal-error"></div>
+    <div class="field">
+      <label for="level-rank">순위 (#N)</label>
+      <input type="number" id="level-rank" min="1" placeholder="예: 1">
+    </div>
+    <div class="field">
+      <label for="level-name">맵 이름</label>
+      <input type="text" id="level-name" placeholder="예: Arctic Lights">
+    </div>
+    <div class="field">
+      <label for="level-creator">제작자 이름</label>
+      <input type="text" id="level-creator" placeholder="예: 모과">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" type="button" onclick="closeAddLevelModal()">취소</button>
+      <button class="btn btn-primary" type="button" onclick="submitAddLevel()">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- 새 클리어 추가 모달 -->
+<div class="modal-overlay" id="clear-modal-overlay">
+  <div class="modal">
+    <h2>새 클리어 추가</h2>
+    <p class="modal-sub">클리어 기록을 맵에 등록합니다.</p>
+    <div class="modal-error" id="clear-modal-error"></div>
+    <div class="field">
+      <label for="clear-level">클리어한 맵</label>
+      <select id="clear-level"></select>
+    </div>
+    <div class="field">
+      <label for="clear-name">클리어자 이름</label>
+      <input type="text" id="clear-name" placeholder="예: 스티릭">
+    </div>
+    <div class="field">
+      <label for="clear-device">클리어 기기</label>
+      <select id="clear-device">
+        <option value="pc">PC</option>
+        <option value="mobile">Mobile</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="clear-video">영상 링크 (필수)</label>
+      <input type="url" id="clear-video" placeholder="예: https://youtube.com/watch?v=...">
+    </div>
+    <div class="field">
+      <label for="clear-detail">세부사항 (선택)</label>
+      <textarea id="clear-detail" placeholder="비워둬도 됩니다"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" type="button" onclick="closeAddClearModal()">취소</button>
+      <button class="btn btn-primary" type="button" onclick="submitAddClear()">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- 확인(삭제 등) 모달 -->
+<div class="modal-overlay" id="confirm-modal-overlay">
+  <div class="modal">
+    <h2 id="confirm-modal-title">확인</h2>
+    <p class="modal-sub" id="confirm-modal-message"></p>
+    <div class="modal-actions">
+      <button class="btn" type="button" onclick="closeConfirmModal()">취소</button>
+      <button class="btn btn-primary" type="button" onclick="handleConfirmAccept()">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 입력(닉네임 변경 등) 모달 -->
+<div class="modal-overlay" id="prompt-modal-overlay">
+  <div class="modal">
+    <h2 id="prompt-modal-title">입력</h2>
+    <div class="field">
+      <label id="prompt-modal-label" for="prompt-modal-input">값</label>
+      <input type="text" id="prompt-modal-input">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" type="button" onclick="closePromptModal()">취소</button>
+      <button class="btn btn-primary" type="button" onclick="handlePromptAccept()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 유저 프로필 모달 -->
+<div class="modal-overlay" id="profile-modal-overlay">
+  <div class="modal profile-modal">
+    <div class="profile-header">
+      <div class="profile-rank" id="profile-rank">#-</div>
+      <div style="flex:1; min-width:0;">
+        <div class="profile-name" id="profile-name">-</div>
+        <div class="profile-score" id="profile-score">0점</div>
+      </div>
+      <button class="icon-btn" id="profile-rename-btn" type="button" title="닉네임 변경" style="display:none;" onclick="renameUser(document.getElementById('profile-name').textContent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+    </div>
+    <div class="clear-panel-label">클리어 기록 리스트 (<span id="profile-clear-count">0</span>)</div>
+    <div id="profile-clear-list" class="profile-clear-list"></div>
+    <div class="modal-actions">
+      <button class="btn" type="button" onclick="closeProfileModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---------- Supabase 연결 ----------
+  const SUPABASE_URL = 'https://oehcxhdphtjzfvmauinh.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9laGN4aGRwaHRqemZ2bWF1aW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0OTIzODYsImV4cCI6MjEwNDA2ODM4Nn0.uweTSWtsxLHMg9o4BGgstHrqz6NezOCyS2Oxza_Dzlc';
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let isAdmin = false;
+
+  const ICONS = {
+    pc: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 21h8M12 17v4"/></svg>`,
+    mobile: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2.5" width="10" height="19" rx="1.8"/><path d="M11 18.5h2"/></svg>`,
+    youtube: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 8.6c0-1.7-1.3-3-3-3.1-2.4-.2-4.7-.3-7-.3s-4.6.1-7 .3c-1.7.1-3 1.4-3 3.1C1.9 10 1.9 12 1.9 12s0 2 .1 3.4c0 1.7 1.3 3 3 3.1 2.4.2 4.7.3 7 .3s4.6-.1 7-.3c1.7-.1 3-1.4 3-3.1.1-1.4.1-3.4.1-3.4s0-2-.1-3.4ZM9.7 15.3V8.7l6 3.3-6 3.3Z"/></svg>`,
+    trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>`,
+    edit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`
+  };
+
+  // 맵 목록과 클리어 기록은 Supabase에서 불러옵니다.
+  let levels = [];
+  let clears = [];
+
+  async function loadData(){
+    const { data: levelRows, error: levelErr } = await sb.from('levels').select('*');
+    const { data: clearRows, error: clearErr } = await sb.from('clears').select('*');
+
+    if(levelErr) console.error('레벨 불러오기 실패', levelErr);
+    if(clearErr) console.error('클리어 기록 불러오기 실패', clearErr);
+
+    levels = (levelRows || []).map(r => ({ id: r.id, rank: r.rank, name: r.name, creator: r.creator }));
+    clears = (clearRows || []).map(r => ({
+      id: r.id, levelId: r.level_id, name: r.name, device: r.device,
+      video: r.video, detail: r.detail || ''
+    }));
+
+    render();
+  }
+
+  function rankColor(rank, minRank, maxRank){
+    const span = maxRank - minRank;
+    const t = span > 0 ? (rank - minRank) / span : 0;
+    const c1 = [255, 46, 196];   // magenta (어려움)
+    const c2 = [35, 230, 255];  // cyan (쉬움)
+    const mix = c1.map((v, i) => Math.round(v + (c2[i] - v) * t));
+    return `rgb(${mix[0]}, ${mix[1]}, ${mix[2]})`;
+  }
+
+  function deviceLabel(d){ return d === 'pc' ? 'PC' : 'Mobile'; }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function renderClearer(c){
+    const detailHtml = c.detail && c.detail.trim().length
+      ? `<div class="clearer-detail">${escapeHtml(c.detail)}</div>`
+      : '';
+    const hasVideo = !!(c.video && c.video.trim().length);
+    const videoBtn = hasVideo
+      ? `<a class="icon-btn youtube" href="${escapeHtml(c.video)}" target="_blank" rel="noopener noreferrer" title="영상 보기">${ICONS.youtube}</a>`
+      : `<span class="icon-btn youtube" style="opacity:0.35;cursor:default" title="등록된 링크 없음">${ICONS.youtube}</span>`;
+    const deleteBtn = isAdmin
+      ? `<button class="icon-btn danger" type="button" title="클리어 기록 제거" onclick="event.stopPropagation(); deleteClear('${c.id}')">${ICONS.trash}</button>`
+      : '';
+    return `
+      <div class="clearer" data-clear-id="${c.id}">
+        <span class="device-icon">${ICONS[c.device] || ICONS.pc}</span>
+        <div class="clearer-main">
+          <div class="clearer-top">
+            <span class="clearer-name">${escapeHtml(c.name)}</span>
+            <span class="clearer-device">${deviceLabel(c.device)}</span>
+          </div>
+          ${detailHtml}
+        </div>
+        <div class="clearer-actions">
+          ${videoBtn}
+          ${deleteBtn}
+        </div>
+      </div>`;
+  }
+
+  function renderLevel(lv, minRank, maxRank){
+    const color = rankColor(lv.rank, minRank, maxRank);
+    const lvClears = clears.filter(c => c.levelId === lv.id);
+    const clearsHtml = lvClears.length
+      ? lvClears.map(renderClearer).join('')
+      : `<div class="empty-state">아직 클리어 기록이 없습니다.</div>`;
+    const deleteLevelBtn = isAdmin
+      ? `<button class="icon-btn danger" type="button" title="맵 제거" onclick="event.stopPropagation(); deleteLevel('${lv.id}')">${ICONS.trash}</button>`
+      : '';
+
+    return `
+      <div class="level" data-id="${lv.id}">
+        <div class="level-row" onclick="toggleLevel('${lv.id}')">
+          <div class="rank-badge" style="background:${color}">#${lv.rank}</div>
+          <div class="level-name-block">
+            <div class="level-name">${escapeHtml(lv.name)}</div>
+            <div class="level-creator">by ${escapeHtml(lv.creator)}</div>
+          </div>
+          <div class="level-actions">
+            ${deleteLevelBtn}
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </div>
+        </div>
+        <div class="clear-panel">
+          <div class="clear-panel-inner">
+            <div class="clear-panel-label">클리어 유저 (${lvClears.length}명)</div>
+            ${clearsHtml}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function render(){
+    const listEl = document.getElementById('level-list');
+    if(!levels.length){
+      listEl.innerHTML = `<div class="empty-state" style="padding:40px 0;">등록된 맵이 없습니다.${isAdmin ? ' "새 맵 추가"로 첫 맵을 등록해보세요.' : ''}</div>`;
+    } else {
+      const sorted = [...levels].sort((a, b) => a.rank - b.rank);
+      const ranks = sorted.map(l => l.rank);
+      const minRank = Math.min(...ranks);
+      const maxRank = Math.max(...ranks);
+      listEl.innerHTML = sorted.map(lv => renderLevel(lv, minRank, maxRank)).join('');
+    }
+    renderRanking();
+  }
+
+  /* ---------- 유저랭킹 ---------- */
+  function mapScoreForRank(rank, totalMaps){
+    if(totalMaps <= 0) return 0;
+    const reverseRank = totalMaps - rank + 1;
+    return Math.round(300 * (reverseRank / totalMaps));
+  }
+
+  function computeUserStats(){
+    const totalMaps = levels.length;
+    const levelById = {};
+    levels.forEach(lv => { levelById[lv.id] = lv; });
+
+    const userMap = {};
+    clears.forEach(c => {
+      const lv = levelById[c.levelId];
+      if(!lv) return;
+      const points = mapScoreForRank(lv.rank, totalMaps);
+      if(!userMap[c.name]){
+        userMap[c.name] = { name: c.name, total: 0, clears: [] };
+      }
+      userMap[c.name].total += points;
+      userMap[c.name].clears.push({
+        levelName: lv.name, rank: lv.rank, video: c.video, points
+      });
+    });
+
+    return Object.values(userMap).sort((a, b) => b.total - a.total);
+  }
+
+  function renderRanking(){
+    const listEl = document.getElementById('ranking-list');
+    const stats = computeUserStats();
+    if(!stats.length){
+      listEl.innerHTML = `<div class="empty-state" style="padding:40px 0;">아직 클리어 기록이 없습니다.</div>`;
+      return;
+    }
+    listEl.innerHTML = stats.map((u, i) => {
+      const pos = i + 1;
+      const posClass = pos === 1 ? 'top1' : pos === 2 ? 'top2' : pos === 3 ? 'top3' : '';
+      return `
+        <div class="rank-row">
+          <div class="rank-position ${posClass}">#${pos}</div>
+          <button type="button" class="rank-user-name" onclick="openProfileModal('${escapeHtml(u.name).replace(/'/g, "\\'")}')">${escapeHtml(u.name)}</button>
+          <div class="rank-score">${u.total}점</div>
+        </div>`;
+    }).join('');
+  }
+
+  function openProfileModal(name){
+    const stats = computeUserStats();
+    const pos = stats.findIndex(u => u.name === name) + 1;
+    const user = stats.find(u => u.name === name);
+    if(!user) return;
+
+    document.getElementById('profile-rank').textContent = '#' + pos;
+    document.getElementById('profile-name').textContent = user.name;
+    document.getElementById('profile-score').textContent = user.total + '점';
+    document.getElementById('profile-clear-count').textContent = user.clears.length;
+    document.getElementById('profile-rename-btn').style.display = isAdmin ? 'flex' : 'none';
+
+    const sortedClears = [...user.clears].sort((a, b) => a.rank - b.rank);
+    const listHtml = sortedClears.map(c => {
+      const hasVideo = !!(c.video && c.video.trim().length);
+      const videoBtn = hasVideo
+        ? `<a class="icon-btn youtube" href="${escapeHtml(c.video)}" target="_blank" rel="noopener noreferrer" title="영상 보기">${ICONS.youtube}</a>`
+        : `<span class="icon-btn youtube" style="opacity:0.35;cursor:default" title="등록된 링크 없음">${ICONS.youtube}</span>`;
+      return `
+        <div class="profile-clear-row">
+          <span class="profile-clear-name">${escapeHtml(c.levelName)}</span>
+          <span class="profile-clear-rank">#${c.rank}</span>
+          <span class="profile-clear-points">${c.points}점</span>
+          ${videoBtn}
+        </div>`;
+    }).join('');
+    document.getElementById('profile-clear-list').innerHTML = listHtml;
+
+    document.getElementById('profile-modal-overlay').classList.add('open');
+  }
+  function closeProfileModal(){
+    document.getElementById('profile-modal-overlay').classList.remove('open');
+  }
+
+  function switchView(view){
+    const levelsView = document.getElementById('levels-view');
+    const rankingView = document.getElementById('ranking-view');
+    const tabLevels = document.getElementById('tab-levels');
+    const tabRanking = document.getElementById('tab-ranking');
+    const heroTitle = document.getElementById('hero-title');
+    const heroDesc = document.getElementById('hero-desc');
+
+    if(view === 'ranking'){
+      levelsView.style.display = 'none';
+      rankingView.style.display = 'block';
+      tabLevels.classList.remove('active');
+      tabRanking.classList.add('active');
+      heroTitle.textContent = '유저랭킹';
+      heroDesc.textContent = '클리어한 맵의 점수를 합산해 유저들을 순위별로 나열합니다.';
+      renderRanking();
+    } else {
+      levelsView.style.display = 'block';
+      rankingView.style.display = 'none';
+      tabRanking.classList.remove('active');
+      tabLevels.classList.add('active');
+      heroTitle.textContent = '데몬리스트';
+      heroDesc.textContent = 'Geometry Dash 유저들의 클리어 기록을 모아, 가장 어려운 맵부터 순서대로 나열합니다.';
+    }
+  }
+
+  // ---------- 커스텀 확인/입력 모달 ----------
+  let _confirmCallback = null;
+  let _promptCallback = null;
+
+  function showConfirm(message, onAccept){
+    document.getElementById('confirm-modal-message').textContent = message;
+    _confirmCallback = onAccept;
+    document.getElementById('confirm-modal-overlay').classList.add('open');
+  }
+  function closeConfirmModal(){
+    document.getElementById('confirm-modal-overlay').classList.remove('open');
+    _confirmCallback = null;
+  }
+  function handleConfirmAccept(){
+    const cb = _confirmCallback;
+    closeConfirmModal();
+    if(cb) cb();
+  }
+
+  function showPrompt(labelText, defaultValue, onAccept){
+    document.getElementById('prompt-modal-label').textContent = labelText;
+    const input = document.getElementById('prompt-modal-input');
+    input.value = defaultValue || '';
+    _promptCallback = onAccept;
+    document.getElementById('prompt-modal-overlay').classList.add('open');
+    setTimeout(() => { input.focus(); input.select(); }, 50);
+  }
+  function closePromptModal(){
+    document.getElementById('prompt-modal-overlay').classList.remove('open');
+    _promptCallback = null;
+  }
+  function handlePromptAccept(){
+    const value = document.getElementById('prompt-modal-input').value.trim();
+    const cb = _promptCallback;
+    closePromptModal();
+    if(cb && value) cb(value);
+  }
+
+  document.getElementById('confirm-modal-overlay').addEventListener('click', (e) => {
+    if(e.target.id === 'confirm-modal-overlay') closeConfirmModal();
+  });
+  document.getElementById('prompt-modal-overlay').addEventListener('click', (e) => {
+    if(e.target.id === 'prompt-modal-overlay') closePromptModal();
+  });
+
+  function toggleLevel(id){
+    const el = document.querySelector(`.level[data-id="${id}"]`);
+    if(!el) return;
+    el.classList.toggle('open');
+  }
+
+  /* ---------- 관리자 인증 ---------- */
+  function openLoginModal(){
+    document.getElementById('login-email').value = '';
+    document.getElementById('login-password').value = '';
+    document.getElementById('login-modal-error').classList.remove('show');
+    document.getElementById('login-modal-overlay').classList.add('open');
+  }
+  function closeLoginModal(){
+    document.getElementById('login-modal-overlay').classList.remove('open');
+  }
+  async function submitLogin(){
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errorEl = document.getElementById('login-modal-error');
+
+    if(!email || !password){
+      errorEl.textContent = '이메일과 비밀번호를 입력해주세요.';
+      errorEl.classList.add('show');
+      return;
+    }
+
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if(error){
+      errorEl.textContent = '로그인 실패: ' + error.message + ' (status: ' + (error.status || '?') + ')';
+      errorEl.classList.add('show');
+      console.error('로그인 에러 상세', error);
+      return;
+    }
+    closeLoginModal();
+  }
+  async function logout(){
+    await sb.auth.signOut();
+  }
+  function updateAdminUI(){
+    document.getElementById('toolbar').style.display = isAdmin ? 'flex' : 'none';
+    document.getElementById('admin-status').style.display = isAdmin ? 'flex' : 'none';
+    document.getElementById('login-btn').style.display = isAdmin ? 'none' : 'flex';
+    document.getElementById('logout-btn').style.display = isAdmin ? 'flex' : 'none';
+  }
+
+  document.getElementById('login-modal-overlay').addEventListener('click', (e) => {
+    if(e.target.id === 'login-modal-overlay') closeLoginModal();
+  });
+
+  /* ---------- 맵/클리어 삭제, 닉네임 변경 (Supabase 반영) ---------- */
+  function deleteLevel(id){
+    showConfirm('이 맵과 관련된 클리어 기록도 함께 제거됩니다. 계속할까요?', async () => {
+      const { error } = await sb.from('levels').delete().eq('id', id);
+      if(error) console.error(error);
+      await loadData();
+    });
+  }
+
+  function deleteClear(id){
+    showConfirm('이 클리어 기록을 제거할까요?', async () => {
+      const { error } = await sb.from('clears').delete().eq('id', id);
+      if(error) console.error(error);
+      await loadData();
+    });
+  }
+
+  function renameUser(oldName){
+    showPrompt('새 닉네임을 입력하세요.', oldName, async (newName) => {
+      if(newName === oldName) return;
+      const { error } = await sb.from('clears').update({ name: newName }).eq('name', oldName);
+      if(error) console.error(error);
+      await loadData();
+      openProfileModal(newName);
+    });
+  }
+
+  /* ---------- 새 맵 추가 ---------- */
+  function openAddLevelModal(){
+    document.getElementById('level-rank').value = '';
+    document.getElementById('level-name').value = '';
+    document.getElementById('level-creator').value = '';
+    document.getElementById('level-modal-error').classList.remove('show');
+    document.getElementById('level-modal-overlay').classList.add('open');
+  }
+  function closeAddLevelModal(){
+    document.getElementById('level-modal-overlay').classList.remove('open');
+  }
+  async function submitAddLevel(){
+    const rank = parseInt(document.getElementById('level-rank').value, 10);
+    const name = document.getElementById('level-name').value.trim();
+    const creator = document.getElementById('level-creator').value.trim();
+    const errorEl = document.getElementById('level-modal-error');
+
+    if(!rank || rank < 1 || !name || !creator){
+      errorEl.textContent = '순위, 맵 이름, 제작자 이름을 모두 입력해주세요.';
+      errorEl.classList.add('show');
+      return;
+    }
+
+    const { error } = await sb.from('levels').insert({ rank, name, creator });
+    if(error){
+      errorEl.textContent = '추가 실패: ' + error.message;
+      errorEl.classList.add('show');
+      return;
+    }
+    await loadData();
+    closeAddLevelModal();
+  }
+
+  /* ---------- 새 클리어 추가 ---------- */
+  function openAddClearModal(){
+    const select = document.getElementById('clear-level');
+    const errorEl = document.getElementById('clear-modal-error');
+    errorEl.classList.remove('show');
+
+    if(!levels.length){
+      errorEl.textContent = '먼저 "새 맵 추가"로 맵을 등록해주세요.';
+      errorEl.classList.add('show');
+    }
+
+    const sorted = [...levels].sort((a, b) => a.rank - b.rank);
+    select.innerHTML = sorted.map(lv =>
+      `<option value="${lv.id}">#${lv.rank} · ${escapeHtml(lv.name)}</option>`
+    ).join('');
+
+    document.getElementById('clear-name').value = '';
+    document.getElementById('clear-device').value = 'pc';
+    document.getElementById('clear-video').value = '';
+    document.getElementById('clear-detail').value = '';
+    document.getElementById('clear-modal-overlay').classList.add('open');
+  }
+  function closeAddClearModal(){
+    document.getElementById('clear-modal-overlay').classList.remove('open');
+  }
+  async function submitAddClear(){
+    const levelId = document.getElementById('clear-level').value;
+    const name = document.getElementById('clear-name').value.trim();
+    const device = document.getElementById('clear-device').value;
+    const video = document.getElementById('clear-video').value.trim();
+    const detail = document.getElementById('clear-detail').value.trim();
+    const errorEl = document.getElementById('clear-modal-error');
+
+    if(!levelId || !name || !video){
+      errorEl.textContent = '클리어한 맵, 클리어자 이름, 영상 링크는 필수입니다.';
+      errorEl.classList.add('show');
+      return;
+    }
+
+    const { error } = await sb.from('clears').insert({
+      level_id: levelId, name, device, video, detail
+    });
+    if(error){
+      errorEl.textContent = '추가 실패: ' + error.message;
+      errorEl.classList.add('show');
+      return;
+    }
+    await loadData();
+    closeAddClearModal();
+  }
+
+  // 오버레이 바깥 클릭 시 닫기
+  document.getElementById('level-modal-overlay').addEventListener('click', (e) => {
+    if(e.target.id === 'level-modal-overlay') closeAddLevelModal();
+  });
+  document.getElementById('clear-modal-overlay').addEventListener('click', (e) => {
+    if(e.target.id === 'clear-modal-overlay') closeAddClearModal();
+  });
+  document.getElementById('profile-modal-overlay').addEventListener('click', (e) => {
+    if(e.target.id === 'profile-modal-overlay') closeProfileModal();
+  });
+
+  /* ---------- 초기화 ---------- */
+  async function init(){
+    const { data: { session } } = await sb.auth.getSession();
+    isAdmin = !!session;
+    updateAdminUI();
+
+    sb.auth.onAuthStateChange((event, session) => {
+      isAdmin = !!session;
+      updateAdminUI();
+      render();
+    });
+
+    // 다른 방문자가 데이터를 추가/수정하면 자동으로 새로고침 (Realtime 활성화 시 동작)
+    try{
+      sb.channel('forum-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'levels' }, () => loadData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'clears' }, () => loadData())
+        .subscribe();
+    }catch(e){ /* Realtime 미설정 시 무시 */ }
+
+    await loadData();
+  }
+
+  init();
+</script>
+
+</body>
+</html>

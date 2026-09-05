@@ -470,6 +470,26 @@
   </div>
 </div>
 
+<!-- 맵 순위 수정 모달 -->
+<div class="modal-overlay" id="edit-rank-modal-overlay">
+  <div class="modal">
+    <h2>맵 순위 수정</h2>
+    <p class="modal-sub">새 순위를 입력해 이동하거나, 순위가 겹칠 경우 이 맵과 아래 맵들을 한 칸씩 밀어낼 수 있습니다.</p>
+    <div class="modal-error" id="edit-rank-modal-error"></div>
+    <div class="field">
+      <label for="edit-rank-input">새 순위 (#N)</label>
+      <input type="number" id="edit-rank-input" min="1">
+    </div>
+    <div class="modal-actions" style="justify-content:space-between;">
+      <button class="btn" type="button" onclick="submitPushDown()">이 맵부터 한 칸씩 밀기</button>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" type="button" onclick="closeEditRankModal()">취소</button>
+        <button class="btn btn-primary" type="button" onclick="submitEditRank()">순위 이동</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 새 클리어 추가 모달 -->
 <div class="modal-overlay" id="clear-modal-overlay">
   <div class="modal">
@@ -641,7 +661,7 @@
       ? lvClears.map(renderClearer).join('')
       : `<div class="empty-state">아직 클리어 기록이 없습니다.</div>`;
     const editRankBtn = isAdmin
-      ? `<button class="icon-btn" type="button" title="순위 수정" onclick="event.stopPropagation(); editLevelRank('${lv.id}')">${ICONS.edit}</button>`
+      ? `<button class="icon-btn" type="button" title="순위 수정" onclick="event.stopPropagation(); openEditRankModal('${lv.id}')">${ICONS.edit}</button>`
       : '';
     const deleteLevelBtn = isAdmin
       ? `<button class="icon-btn danger" type="button" title="맵 제거" onclick="event.stopPropagation(); deleteLevel('${lv.id}')">${ICONS.trash}</button>`
@@ -948,20 +968,58 @@
     await sb.from('levels').update({ rank: newRank }).eq('id', lv.id);
   }
 
-  function editLevelRank(id){
+  function openEditRankModal(id){
     const lv = levels.find(l => l.id === id);
     if(!lv) return;
+    document.getElementById('edit-rank-modal-overlay').dataset.levelId = id;
+    document.getElementById('edit-rank-input').value = lv.rank;
+    document.getElementById('edit-rank-modal-error').classList.remove('show');
+    document.getElementById('edit-rank-modal-overlay').classList.add('open');
+  }
+  function closeEditRankModal(){
+    document.getElementById('edit-rank-modal-overlay').classList.remove('open');
+  }
+  async function submitEditRank(){
+    const overlay = document.getElementById('edit-rank-modal-overlay');
+    const id = overlay.dataset.levelId;
+    const lv = levels.find(l => l.id === id);
+    const errorEl = document.getElementById('edit-rank-modal-error');
     const maxAllowed = levels.length;
-    showPrompt(`새 순위를 입력하세요 (1~${maxAllowed})`, String(lv.rank), async (value) => {
-      let newRank = parseInt(value, 10);
-      if(isNaN(newRank)) return;
-      if(newRank < 1) newRank = 1;
-      if(newRank > maxAllowed) newRank = maxAllowed;
-      if(newRank === lv.rank) return;
+    let newRank = parseInt(document.getElementById('edit-rank-input').value, 10);
 
-      await reorderLevel(lv, newRank);
-      await loadData();
-    });
+    if(!lv || !newRank || newRank < 1){
+      errorEl.textContent = '올바른 순위를 입력해주세요.';
+      errorEl.classList.add('show');
+      return;
+    }
+    if(newRank > maxAllowed) newRank = maxAllowed;
+    if(newRank === lv.rank){
+      closeEditRankModal();
+      return;
+    }
+
+    await reorderLevel(lv, newRank);
+    await loadData();
+    closeEditRankModal();
+  }
+  // 순위가 겹치는 맵이 생겼을 때 해소용: 이 맵과, 이 맵보다 아래(숫자가 큰) 맵들을 전부 한 칸씩 밀어냄
+  // (같은 순위를 가진 다른 맵은 그대로 두어, 겹침이 해소되도록 함)
+  async function pushLevelDown(id){
+    const lv = levels.find(l => l.id === id);
+    if(!lv) return;
+    const rank = lv.rank;
+    const affected = levels.filter(l => l.id !== id && l.rank > rank);
+    for(const a of affected){
+      await sb.from('levels').update({ rank: a.rank + 1 }).eq('id', a.id);
+    }
+    await sb.from('levels').update({ rank: rank + 1 }).eq('id', id);
+    await loadData();
+  }
+  async function submitPushDown(){
+    const overlay = document.getElementById('edit-rank-modal-overlay');
+    const id = overlay.dataset.levelId;
+    await pushLevelDown(id);
+    closeEditRankModal();
   }
 
   function deleteClear(id){
@@ -1085,6 +1143,9 @@
   });
   document.getElementById('profile-modal-overlay').addEventListener('click', (e) => {
     if(e.target.id === 'profile-modal-overlay') closeProfileModal();
+  });
+  document.getElementById('edit-rank-modal-overlay').addEventListener('click', (e) => {
+    if(e.target.id === 'edit-rank-modal-overlay') closeEditRankModal();
   });
 
   /* ---------- 초기화 ---------- */

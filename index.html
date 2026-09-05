@@ -453,6 +453,7 @@
     <div class="field">
       <label for="level-rank">순위 (#N)</label>
       <input type="number" id="level-rank" min="1" placeholder="예: 1">
+      <div class="field-hint">해당 순위에 삽입되며, 기존 맵들은 자동으로 한 칸씩 밀려납니다.</div>
     </div>
     <div class="field">
       <label for="level-name">맵 이름</label>
@@ -517,10 +518,11 @@
   </div>
 </div>
 
-<!-- 입력(닉네임 변경 등) 모달 -->
+<!-- 입력(닉네임 변경, 순위 수정 등) 모달 -->
 <div class="modal-overlay" id="prompt-modal-overlay">
   <div class="modal">
     <h2 id="prompt-modal-title">입력</h2>
+    <div class="modal-error" id="prompt-modal-error"></div>
     <div class="field">
       <label id="prompt-modal-label" for="prompt-modal-input">값</label>
       <input type="text" id="prompt-modal-input">
@@ -638,6 +640,9 @@
     const clearsHtml = lvClears.length
       ? lvClears.map(renderClearer).join('')
       : `<div class="empty-state">아직 클리어 기록이 없습니다.</div>`;
+    const editRankBtn = isAdmin
+      ? `<button class="icon-btn" type="button" title="순위 수정" onclick="event.stopPropagation(); editLevelRank('${lv.id}')">${ICONS.edit}</button>`
+      : '';
     const deleteLevelBtn = isAdmin
       ? `<button class="icon-btn danger" type="button" title="맵 제거" onclick="event.stopPropagation(); deleteLevel('${lv.id}')">${ICONS.trash}</button>`
       : '';
@@ -651,6 +656,7 @@
             <div class="level-creator">by ${escapeHtml(lv.creator)}</div>
           </div>
           <div class="level-actions">
+            ${editRankBtn}
             ${deleteLevelBtn}
             <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M6 9l6 6 6-6"/>
@@ -807,23 +813,42 @@
     if(cb) cb();
   }
 
-  function showPrompt(labelText, defaultValue, onAccept){
+  function showPrompt(labelText, defaultValue, onAccept, validator){
     document.getElementById('prompt-modal-label').textContent = labelText;
     const input = document.getElementById('prompt-modal-input');
     input.value = defaultValue || '';
+    document.getElementById('prompt-modal-error').classList.remove('show');
     _promptCallback = onAccept;
+    _promptValidator = validator || null;
     document.getElementById('prompt-modal-overlay').classList.add('open');
     setTimeout(() => { input.focus(); input.select(); }, 50);
   }
   function closePromptModal(){
     document.getElementById('prompt-modal-overlay').classList.remove('open');
     _promptCallback = null;
+    _promptValidator = null;
   }
   function handlePromptAccept(){
     const value = document.getElementById('prompt-modal-input').value.trim();
+    const errorEl = document.getElementById('prompt-modal-error');
+
+    if(!value){
+      errorEl.textContent = '값을 입력해주세요.';
+      errorEl.classList.add('show');
+      return;
+    }
+    if(_promptValidator){
+      const result = _promptValidator(value);
+      if(result !== true){
+        errorEl.textContent = result || '올바른 값을 입력해주세요.';
+        errorEl.classList.add('show');
+        return;
+      }
+    }
+
     const cb = _promptCallback;
     closePromptModal();
-    if(cb && value) cb(value);
+    if(cb) cb(value);
   }
 
   document.getElementById('confirm-modal-overlay').addEventListener('click', (e) => {
@@ -892,6 +917,43 @@
     });
   }
 
+  // 맵 순위를 이동시키고, 사이에 있는 맵들의 순위를 한 칸씩 밀어서 항상 1~N으로 유지합니다.
+  async function reorderLevel(lv, newRank){
+    const oldRank = lv.rank;
+    if(newRank === oldRank) return;
+
+    if(newRank < oldRank){
+      // newRank ~ oldRank-1 사이 맵들을 한 칸씩 뒤로(숫자 +1) 밀어냄
+      const affected = levels.filter(l => l.id !== lv.id && l.rank >= newRank && l.rank <= oldRank - 1);
+      for(const a of affected){
+        await sb.from('levels').update({ rank: a.rank + 1 }).eq('id', a.id);
+      }
+    } else {
+      // oldRank+1 ~ newRank 사이 맵들을 한 칸씩 앞으로(숫자 -1) 당김
+      const affected = levels.filter(l => l.id !== lv.id && l.rank > oldRank && l.rank <= newRank);
+      for(const a of affected){
+        await sb.from('levels').update({ rank: a.rank - 1 }).eq('id', a.id);
+      }
+    }
+    await sb.from('levels').update({ rank: newRank }).eq('id', lv.id);
+  }
+
+  function editLevelRank(id){
+    const lv = levels.find(l => l.id === id);
+    if(!lv) return;
+    const maxAllowed = levels.length;
+    showPrompt(`새 순위를 입력하세요 (1~${maxAllowed})`, String(lv.rank), async (value) => {
+      let newRank = parseInt(value, 10);
+      if(isNaN(newRank)) return;
+      if(newRank < 1) newRank = 1;
+      if(newRank > maxAllowed) newRank = maxAllowed;
+      if(newRank === lv.rank) return;
+
+      await reorderLevel(lv, newRank);
+      await loadData();
+    });
+  }
+
   function deleteClear(id){
     showConfirm('이 클리어 기록을 제거할까요?', async () => {
       const { error } = await sb.from('clears').delete().eq('id', id);
@@ -922,7 +984,7 @@
     document.getElementById('level-modal-overlay').classList.remove('open');
   }
   async function submitAddLevel(){
-    const rank = parseInt(document.getElementById('level-rank').value, 10);
+    let rank = parseInt(document.getElementById('level-rank').value, 10);
     const name = document.getElementById('level-name').value.trim();
     const creator = document.getElementById('level-creator').value.trim();
     const errorEl = document.getElementById('level-modal-error');
@@ -931,6 +993,16 @@
       errorEl.textContent = '순위, 맵 이름, 제작자 이름을 모두 입력해주세요.';
       errorEl.classList.add('show');
       return;
+    }
+
+    // 삽입 위치는 1 ~ (현재 맵 개수 + 1) 범위로 고정
+    const maxAllowed = levels.length + 1;
+    if(rank > maxAllowed) rank = maxAllowed;
+
+    // 새 맵이 들어갈 자리보다 순위가 같거나 낮은(숫자가 큰) 맵들은 한 칸씩 뒤로 밀려남
+    const toShift = levels.filter(lv => lv.rank >= rank);
+    for(const lv of toShift){
+      await sb.from('levels').update({ rank: lv.rank + 1 }).eq('id', lv.id);
     }
 
     const { error } = await sb.from('levels').insert({ rank, name, creator });

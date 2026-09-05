@@ -911,8 +911,18 @@
   /* ---------- 맵/클리어 삭제, 닉네임 변경 (Supabase 반영) ---------- */
   function deleteLevel(id){
     showConfirm('이 맵과 관련된 클리어 기록도 함께 제거됩니다. 계속할까요?', async () => {
+      const lv = levels.find(l => l.id === id);
       const { error } = await sb.from('levels').delete().eq('id', id);
-      if(error) console.error(error);
+      if(error){ console.error(error); return; }
+
+      // 삭제된 맵보다 순위가 낮았던(숫자가 큰) 맵들을 한 칸씩 앞으로 당겨서 빈 자리를 메움
+      if(lv){
+        const affected = levels.filter(l => l.id !== id && l.rank > lv.rank);
+        for(const a of affected){
+          await sb.from('levels').update({ rank: a.rank - 1 }).eq('id', a.id);
+        }
+      }
+
       await loadData();
     });
   }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ACACIAN FORUM — 데몬리스트</title>
+<title>스티릭 포럼 - 데몬리스트</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -343,6 +343,12 @@
   .profile-clear-rank{
     flex:0 0 auto; font-family:'JetBrains Mono', monospace;
     font-size:12px; color: var(--muted);
+  }
+  .profile-clear-device{
+    flex:0 0 auto; font-family:'JetBrains Mono', monospace;
+    font-size:11px; color: var(--muted); letter-spacing:0.06em;
+    text-transform:uppercase; border:1px solid var(--border);
+    border-radius:5px; padding:2px 6px;
   }
   .profile-clear-points{
     flex:0 0 auto; font-family:'JetBrains Mono', monospace;
@@ -816,7 +822,7 @@
       }
       userMap[c.name].total += points;
       userMap[c.name].clears.push({
-        levelName: lv.name, rank: lv.rank, video: c.video, points
+        levelName: lv.name, rank: lv.rank, video: c.video, device: c.device, points
       });
     });
 
@@ -873,6 +879,7 @@
         <div class="profile-clear-row">
           <span class="profile-clear-name">${escapeHtml(c.levelName)}</span>
           <span class="profile-clear-rank">#${c.rank}</span>
+          <span class="profile-clear-device">${deviceLabel(c.device)}</span>
           <span class="profile-clear-points">${c.points}점</span>
           ${videoBtn}
         </div>`;

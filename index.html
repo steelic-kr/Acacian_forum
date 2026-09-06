@@ -115,6 +115,31 @@
   .search-input::placeholder{ color: var(--muted); font-weight:500; }
   .search-input:focus{ border-color: var(--cyan); }
 
+  .search-results{
+    position: relative;
+    margin-top: 6px;
+    max-height: 180px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-2);
+    display: none;
+  }
+  .search-results.show{ display: block; }
+  .search-result-item{
+    padding: 10px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+    font-family:'Rajdhani', sans-serif;
+  }
+  .search-result-item:last-child{ border-bottom: none; }
+  .search-result-item:hover{ background: var(--surface); color: var(--cyan); }
+  .search-result-empty{
+    padding: 10px 12px; font-size: 13px; color: var(--muted); cursor: default;
+  }
+
   .toolbar{
     display:none; gap:10px; justify-content:flex-end;
     padding: 26px 4px 0;
@@ -516,8 +541,12 @@
     <p class="modal-sub">클리어 기록을 맵에 등록합니다.</p>
     <div class="modal-error" id="clear-modal-error"></div>
     <div class="field">
-      <label for="clear-level">클리어한 맵</label>
-      <select id="clear-level"></select>
+      <label for="clear-level-search">클리어한 맵</label>
+      <input type="text" id="clear-level-search" class="search-input" placeholder="맵 이름으로 검색..." autocomplete="off"
+        oninput="onClearLevelSearchInput()" onfocus="onClearLevelSearchInput()"
+        onblur="setTimeout(() => document.getElementById('clear-level-results').classList.remove('show'), 150)">
+      <div id="clear-level-results" class="search-results"></div>
+      <input type="hidden" id="clear-level-id">
     </div>
     <div class="field">
       <label for="clear-name">클리어자 이름</label>
@@ -1189,20 +1218,42 @@
   }
 
   /* ---------- 새 클리어 추가 ---------- */
+  function onClearLevelSearchInput(){
+    const query = document.getElementById('clear-level-search').value.trim().toLowerCase();
+    const resultsEl = document.getElementById('clear-level-results');
+    const sorted = [...levels].sort((a, b) => a.rank - b.rank);
+    const filtered = query ? sorted.filter(lv => lv.name.toLowerCase().includes(query)) : sorted;
+
+    if(!filtered.length){
+      resultsEl.innerHTML = `<div class="search-result-empty">일치하는 맵이 없습니다.</div>`;
+    } else {
+      resultsEl.innerHTML = filtered.map(lv =>
+        `<div class="search-result-item" onmousedown="selectClearLevel('${lv.id}')">#${lv.rank} · ${escapeHtml(lv.name)}</div>`
+      ).join('');
+    }
+    resultsEl.classList.add('show');
+  }
+  function selectClearLevel(id){
+    const lv = levels.find(l => l.id === id);
+    if(!lv) return;
+    document.getElementById('clear-level-id').value = lv.id;
+    document.getElementById('clear-level-search').value = `#${lv.rank} · ${lv.name}`;
+    document.getElementById('clear-level-results').classList.remove('show');
+  }
+
   function openAddClearModal(){
-    const select = document.getElementById('clear-level');
     const errorEl = document.getElementById('clear-modal-error');
     errorEl.classList.remove('show');
+
+    document.getElementById('clear-level-search').value = '';
+    document.getElementById('clear-level-id').value = '';
+    document.getElementById('clear-level-results').innerHTML = '';
+    document.getElementById('clear-level-results').classList.remove('show');
 
     if(!levels.length){
       errorEl.textContent = '먼저 "새 맵 추가"로 맵을 등록해주세요.';
       errorEl.classList.add('show');
     }
-
-    const sorted = [...levels].sort((a, b) => a.rank - b.rank);
-    select.innerHTML = sorted.map(lv =>
-      `<option value="${lv.id}">#${lv.rank} · ${escapeHtml(lv.name)}</option>`
-    ).join('');
 
     document.getElementById('clear-name').value = '';
     document.getElementById('clear-device').value = 'pc';
@@ -1214,15 +1265,16 @@
     document.getElementById('clear-modal-overlay').classList.remove('open');
   }
   async function submitAddClear(){
-    const levelId = document.getElementById('clear-level').value;
+    const levelId = document.getElementById('clear-level-id').value;
     const name = document.getElementById('clear-name').value.trim();
     const device = document.getElementById('clear-device').value;
     const video = document.getElementById('clear-video').value.trim();
     const detail = document.getElementById('clear-detail').value.trim();
     const errorEl = document.getElementById('clear-modal-error');
 
-    if(!levelId || !name || !video){
-      errorEl.textContent = '클리어한 맵, 클리어자 이름, 영상 링크는 필수입니다.';
+    const levelExists = levels.some(lv => lv.id === levelId);
+    if(!levelId || !levelExists || !name || !video){
+      errorEl.textContent = '목록에서 맵을 선택하고, 클리어자 이름과 영상 링크를 입력해주세요.';
       errorEl.classList.add('show');
       return;
     }

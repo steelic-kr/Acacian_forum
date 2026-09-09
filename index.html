@@ -520,12 +520,20 @@
   </div>
 </div>
 
-<!-- 맵 순위 수정 모달 -->
+<!-- 맵 정보 수정 모달 -->
 <div class="modal-overlay" id="edit-rank-modal-overlay">
   <div class="modal">
-    <h2>맵 순위 수정</h2>
-    <p class="modal-sub">새 순위를 입력해 이동하거나, 순위가 겹칠 경우 이 맵과 아래 맵들을 한 칸씩 밀어낼 수 있습니다.</p>
+    <h2>맵 정보 수정</h2>
+    <p class="modal-sub">맵 이름·제작자·순위를 수정합니다. 순위가 겹칠 경우 이 맵과 아래 맵들을 한 칸씩 밀어낼 수도 있습니다.</p>
     <div class="modal-error" id="edit-rank-modal-error"></div>
+    <div class="field">
+      <label for="edit-level-name">맵 이름</label>
+      <input type="text" id="edit-level-name">
+    </div>
+    <div class="field">
+      <label for="edit-level-creator">제작자 이름</label>
+      <input type="text" id="edit-level-creator">
+    </div>
     <div class="field">
       <label for="edit-rank-input">새 순위 (#N)</label>
       <input type="number" id="edit-rank-input" min="1">
@@ -534,7 +542,7 @@
       <button class="btn" type="button" onclick="submitPushDown()">이 맵부터 한 칸씩 밀기</button>
       <div style="display:flex; gap:8px;">
         <button class="btn" type="button" onclick="closeEditRankModal()">취소</button>
-        <button class="btn btn-primary" type="button" onclick="submitEditRank()">순위 이동</button>
+        <button class="btn btn-primary" type="button" onclick="submitEditRank()">저장</button>
       </div>
     </div>
   </div>
@@ -747,7 +755,7 @@
       ? lvClears.map(renderClearer).join('')
       : `<div class="empty-state">아직 클리어 기록이 없습니다.</div>`;
     const editRankBtn = isAdmin
-      ? `<button class="icon-btn" type="button" title="순위 수정" onclick="event.stopPropagation(); openEditRankModal('${lv.id}')">${ICONS.edit}</button>`
+      ? `<button class="icon-btn" type="button" title="맵 정보 수정" onclick="event.stopPropagation(); openEditRankModal('${lv.id}')">${ICONS.edit}</button>`
       : '';
     const deleteLevelBtn = isAdmin
       ? `<button class="icon-btn danger" type="button" title="맵 제거" onclick="event.stopPropagation(); deleteLevel('${lv.id}')">${ICONS.trash}</button>`
@@ -1076,6 +1084,8 @@
     const lv = levels.find(l => l.id === id);
     if(!lv) return;
     document.getElementById('edit-rank-modal-overlay').dataset.levelId = id;
+    document.getElementById('edit-level-name').value = lv.name;
+    document.getElementById('edit-level-creator').value = lv.creator;
     document.getElementById('edit-rank-input').value = lv.rank;
     document.getElementById('edit-rank-modal-error').classList.remove('show');
     document.getElementById('edit-rank-modal-overlay').classList.add('open');
@@ -1089,20 +1099,26 @@
     const lv = levels.find(l => l.id === id);
     const errorEl = document.getElementById('edit-rank-modal-error');
     const maxAllowed = levels.length;
+    const name = document.getElementById('edit-level-name').value.trim();
+    const creator = document.getElementById('edit-level-creator').value.trim();
     let newRank = parseInt(document.getElementById('edit-rank-input').value, 10);
 
-    if(!lv || !newRank || newRank < 1){
-      errorEl.textContent = '올바른 순위를 입력해주세요.';
+    if(!lv || !name || !creator || !newRank || newRank < 1){
+      errorEl.textContent = '맵 이름, 제작자, 순위를 모두 올바르게 입력해주세요.';
       errorEl.classList.add('show');
       return;
     }
     if(newRank > maxAllowed) newRank = maxAllowed;
-    if(newRank === lv.rank){
-      closeEditRankModal();
+
+    if(newRank !== lv.rank){
+      await reorderLevel(lv, newRank);
+    }
+    const { error } = await sb.from('levels').update({ name, creator }).eq('id', id);
+    if(error){
+      errorEl.textContent = '저장 실패: ' + error.message;
+      errorEl.classList.add('show');
       return;
     }
-
-    await reorderLevel(lv, newRank);
     await loadData();
     closeEditRankModal();
   }

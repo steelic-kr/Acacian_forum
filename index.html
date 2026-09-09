@@ -524,7 +524,7 @@
 <div class="modal-overlay" id="edit-rank-modal-overlay">
   <div class="modal">
     <h2>맵 정보 수정</h2>
-    <p class="modal-sub">맵 이름·제작자·순위를 수정합니다. 순위가 겹칠 경우 이 맵과 아래 맵들을 한 칸씩 밀어낼 수도 있습니다.</p>
+    <p class="modal-sub">맵 이름·제작자·순위를 수정합니다. 순위가 겹치면 아래 맵들을 밀어내고, 순위 사이에 빈자리가 있으면 아래 맵들을 끌어올려 채울 수 있습니다.</p>
     <div class="modal-error" id="edit-rank-modal-error"></div>
     <div class="field">
       <label for="edit-level-name">맵 이름</label>
@@ -538,9 +538,12 @@
       <label for="edit-rank-input">새 순위 (#N)</label>
       <input type="number" id="edit-rank-input" min="1">
     </div>
-    <div class="modal-actions" style="justify-content:space-between;">
-      <button class="btn" type="button" onclick="submitPushDown()">이 맵부터 한 칸씩 밀기</button>
+    <div class="modal-actions" style="flex-direction:column; align-items:stretch; gap:10px;">
       <div style="display:flex; gap:8px;">
+        <button class="btn" type="button" style="flex:1;" onclick="submitPullUp()">이 맵부터 한 칸씩 올리기</button>
+        <button class="btn" type="button" style="flex:1;" onclick="submitPushDown()">이 맵부터 한 칸씩 밀기</button>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
         <button class="btn" type="button" onclick="closeEditRankModal()">취소</button>
         <button class="btn btn-primary" type="button" onclick="submitEditRank()">저장</button>
       </div>
@@ -1139,6 +1142,29 @@
     const overlay = document.getElementById('edit-rank-modal-overlay');
     const id = overlay.dataset.levelId;
     await pushLevelDown(id);
+    closeEditRankModal();
+  }
+  // 순위 사이에 빈자리(공백)가 생겼을 때 해소용: 이 맵과, 이 맵보다 아래(숫자가 큰) 맵들을 전부 한 칸씩 끌어올림
+  async function pullLevelUp(id){
+    const lv = levels.find(l => l.id === id);
+    if(!lv) return;
+    const rank = lv.rank;
+    if(rank <= 1){
+      document.getElementById('edit-rank-modal-error').textContent = '이미 1위라 더 끌어올릴 수 없습니다.';
+      document.getElementById('edit-rank-modal-error').classList.add('show');
+      return;
+    }
+    const affected = levels.filter(l => l.id !== id && l.rank > rank);
+    for(const a of affected){
+      await sb.from('levels').update({ rank: a.rank - 1 }).eq('id', a.id);
+    }
+    await sb.from('levels').update({ rank: rank - 1 }).eq('id', id);
+    await loadData();
+  }
+  async function submitPullUp(){
+    const overlay = document.getElementById('edit-rank-modal-overlay');
+    const id = overlay.dataset.levelId;
+    await pullLevelUp(id);
     closeEditRankModal();
   }
 

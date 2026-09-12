@@ -406,7 +406,7 @@
   }
   .modal-error{
     color: var(--magenta); font-size:13px; margin-top:-6px; margin-bottom:12px;
-    display:none;
+    display:none; white-space: pre-wrap;
   }
   .modal-error.show{ display:block; }
 
@@ -454,6 +454,7 @@
     <div class="toolbar" id="toolbar">
       <button class="btn" type="button" onclick="openAddLevelModal()">+ 새 맵 추가</button>
       <button class="btn btn-primary" type="button" onclick="openAddClearModal()">+ 새 클리어 추가</button>
+      <button class="btn" type="button" onclick="openReorderModal()">순위 재정렬</button>
     </div>
 
     <div class="list-head">
@@ -550,6 +551,27 @@
       <div style="display:flex; gap:8px; justify-content:flex-end;">
         <button class="btn" type="button" onclick="closeEditRankModal()">취소</button>
         <button class="btn btn-primary" type="button" onclick="submitEditRank()">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 순위 재정렬 모달 -->
+<div class="modal-overlay" id="reorder-modal-overlay">
+  <div class="modal" style="max-width:480px;">
+    <h2>순위 재정렬</h2>
+    <p class="modal-sub">맵 이름을 원하는 순위 순서대로 한 줄에 하나씩 입력하세요 (1위부터). 현재 등록된 모든 맵이 정확히 한 번씩 포함되어야 합니다.</p>
+    <div class="modal-error" id="reorder-modal-error"></div>
+    <div class="field">
+      <label for="reorder-textarea">맵 이름 목록</label>
+      <textarea id="reorder-textarea" style="min-height:240px; font-family:'JetBrains Mono', monospace; font-size:13px;" placeholder="Arctic Lights&#10;Sonic Wave&#10;Shmarley Ville"></textarea>
+      <div class="field-hint">줄 순서를 바꿔서 다시 붙여넣으면 그 순서로 재정렬됩니다.</div>
+    </div>
+    <div class="modal-actions" style="justify-content:space-between;">
+      <button class="btn" type="button" onclick="fillReorderFromCurrent()">현재 순서 불러오기</button>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" type="button" onclick="closeReorderModal()">취소</button>
+        <button class="btn btn-primary" type="button" onclick="submitReorder()">적용</button>
       </div>
     </div>
   </div>
@@ -1172,6 +1194,70 @@
     closeEditRankModal();
   }
 
+  /* ---------- 순위 재정렬 (이름 목록 붙여넣기) ---------- */
+  function openReorderModal(){
+    document.getElementById('reorder-modal-error').classList.remove('show');
+    fillReorderFromCurrent();
+    document.getElementById('reorder-modal-overlay').classList.add('open');
+  }
+  function closeReorderModal(){
+    document.getElementById('reorder-modal-overlay').classList.remove('open');
+  }
+  function fillReorderFromCurrent(){
+    const sorted = [...levels].sort((a, b) => a.rank - b.rank);
+    document.getElementById('reorder-textarea').value = sorted.map(lv => lv.name).join('\n');
+  }
+  async function submitReorder(){
+    const raw = document.getElementById('reorder-textarea').value;
+    const errorEl = document.getElementById('reorder-modal-error');
+    const lines = raw.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+
+    if(!lines.length){
+      errorEl.textContent = '맵 이름을 한 줄에 하나씩 입력해주세요.';
+      errorEl.classList.add('show');
+      return;
+    }
+
+    // 이름으로 맵을 찾아 매칭 (앞뒤 공백/대소문자 무시). 이름이 중복되면 등장 순서대로 하나씩 매칭.
+    const pool = [...levels];
+    const usedIds = new Set();
+    const orderedIds = [];
+    const notFound = [];
+
+    for(const line of lines){
+      const idx = pool.findIndex(lv => !usedIds.has(lv.id) && lv.name.trim().toLowerCase() === line.toLowerCase());
+      if(idx === -1){
+        notFound.push(line);
+      } else {
+        usedIds.add(pool[idx].id);
+        orderedIds.push(pool[idx].id);
+      }
+    }
+
+    const missing = levels.filter(lv => !usedIds.has(lv.id)).map(lv => lv.name);
+
+    if(notFound.length || missing.length){
+      let msg = '';
+      if(notFound.length) msg += `일치하는 맵을 찾을 수 없음:\n${notFound.join('\n')}\n\n`;
+      if(missing.length) msg += `목록에서 빠진 맵:\n${missing.join('\n')}`;
+      errorEl.textContent = msg.trim();
+      errorEl.classList.add('show');
+      return;
+    }
+
+    // 순서대로 1위부터 순위 재부여 (바뀐 항목만 업데이트)
+    for(let i = 0; i < orderedIds.length; i++){
+      const newRank = i + 1;
+      const lv = levels.find(l => l.id === orderedIds[i]);
+      if(lv.rank !== newRank){
+        await sb.from('levels').update({ rank: newRank }).eq('id', orderedIds[i]);
+      }
+    }
+
+    await loadData();
+    closeReorderModal();
+  }
+
   function deleteClear(id){
     showConfirm('이 클리어 기록을 제거할까요?', async () => {
       const { error } = await sb.from('clears').delete().eq('id', id);
@@ -1356,6 +1442,9 @@
   });
   document.getElementById('edit-rank-modal-overlay').addEventListener('click', (e) => {
     if(e.target.id === 'edit-rank-modal-overlay') closeEditRankModal();
+  });
+  document.getElementById('reorder-modal-overlay').addEventListener('click', (e) => {
+    if(e.target.id === 'reorder-modal-overlay') closeReorderModal();
   });
   document.getElementById('edit-clear-modal-overlay').addEventListener('click', (e) => {
     if(e.target.id === 'edit-clear-modal-overlay') closeEditClearModal();

@@ -237,13 +237,17 @@
     border-top: 1px solid var(--border);
     background: var(--surface-2);
   }
-  .level.open .clear-panel{ max-height: 800px; }
+  .level.open .clear-panel{ max-height: 560px; }
 
   .clear-panel-inner{ padding: 6px 18px 16px; }
   .clear-panel-label{
     font-family:'JetBrains Mono', monospace;
     font-size:11px; letter-spacing:0.14em; text-transform:uppercase;
     color: var(--muted); padding: 12px 0 8px;
+  }
+  .clearer-list-scroll{
+    max-height: 440px;
+    overflow-y: auto;
   }
 
   .clearer{
@@ -783,7 +787,7 @@
         <div class="clear-panel">
           <div class="clear-panel-inner">
             <div class="clear-panel-label">클리어 유저 (${lvClears.length}명)</div>
-            ${clearsHtml}
+            <div class="clearer-list-scroll">${clearsHtml}</div>
           </div>
         </div>
       </div>`;

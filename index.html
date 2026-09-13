@@ -1079,9 +1079,9 @@
       // 삭제된 맵보다 순위가 낮았던(숫자가 큰) 맵들을 한 칸씩 앞으로 당겨서 빈 자리를 메움
       if(lv){
         const affected = levels.filter(l => l.id !== id && l.rank > lv.rank);
-        for(const a of affected){
-          await sb.from('levels').update({ rank: a.rank - 1 }).eq('id', a.id);
-        }
+        await Promise.all(affected.map(a =>
+          sb.from('levels').update({ rank: a.rank - 1 }).eq('id', a.id)
+        ));
       }
 
       await loadData();
@@ -1096,15 +1096,15 @@
     if(newRank < oldRank){
       // newRank ~ oldRank-1 사이 맵들을 한 칸씩 뒤로(숫자 +1) 밀어냄
       const affected = levels.filter(l => l.id !== lv.id && l.rank >= newRank && l.rank <= oldRank - 1);
-      for(const a of affected){
-        await sb.from('levels').update({ rank: a.rank + 1 }).eq('id', a.id);
-      }
+      await Promise.all(affected.map(a =>
+        sb.from('levels').update({ rank: a.rank + 1 }).eq('id', a.id)
+      ));
     } else {
       // oldRank+1 ~ newRank 사이 맵들을 한 칸씩 앞으로(숫자 -1) 당김
       const affected = levels.filter(l => l.id !== lv.id && l.rank > oldRank && l.rank <= newRank);
-      for(const a of affected){
-        await sb.from('levels').update({ rank: a.rank - 1 }).eq('id', a.id);
-      }
+      await Promise.all(affected.map(a =>
+        sb.from('levels').update({ rank: a.rank - 1 }).eq('id', a.id)
+      ));
     }
     await sb.from('levels').update({ rank: newRank }).eq('id', lv.id);
   }
@@ -1158,9 +1158,9 @@
     if(!lv) return;
     const rank = lv.rank;
     const affected = levels.filter(l => l.id !== id && l.rank > rank);
-    for(const a of affected){
-      await sb.from('levels').update({ rank: a.rank + 1 }).eq('id', a.id);
-    }
+    await Promise.all(affected.map(a =>
+      sb.from('levels').update({ rank: a.rank + 1 }).eq('id', a.id)
+    ));
     await sb.from('levels').update({ rank: rank + 1 }).eq('id', id);
     await loadData();
   }
@@ -1181,9 +1181,9 @@
       return;
     }
     const affected = levels.filter(l => l.id !== id && l.rank > rank);
-    for(const a of affected){
-      await sb.from('levels').update({ rank: a.rank - 1 }).eq('id', a.id);
-    }
+    await Promise.all(affected.map(a =>
+      sb.from('levels').update({ rank: a.rank - 1 }).eq('id', a.id)
+    ));
     await sb.from('levels').update({ rank: rank - 1 }).eq('id', id);
     await loadData();
   }
@@ -1245,14 +1245,16 @@
       return;
     }
 
-    // 순서대로 1위부터 순위 재부여 (바뀐 항목만 업데이트)
+    // 순서대로 1위부터 순위 재부여 (바뀐 항목만 업데이트, 병렬 처리)
+    const updates = [];
     for(let i = 0; i < orderedIds.length; i++){
       const newRank = i + 1;
       const lv = levels.find(l => l.id === orderedIds[i]);
       if(lv.rank !== newRank){
-        await sb.from('levels').update({ rank: newRank }).eq('id', orderedIds[i]);
+        updates.push(sb.from('levels').update({ rank: newRank }).eq('id', orderedIds[i]));
       }
     }
+    await Promise.all(updates);
 
     await loadData();
     closeReorderModal();
@@ -1342,9 +1344,9 @@
 
     // 새 맵이 들어갈 자리보다 순위가 같거나 낮은(숫자가 큰) 맵들은 한 칸씩 뒤로 밀려남
     const toShift = levels.filter(lv => lv.rank >= rank);
-    for(const lv of toShift){
-      await sb.from('levels').update({ rank: lv.rank + 1 }).eq('id', lv.id);
-    }
+    await Promise.all(toShift.map(lv =>
+      sb.from('levels').update({ rank: lv.rank + 1 }).eq('id', lv.id)
+    ));
 
     const { error } = await sb.from('levels').insert({ rank, name, creator });
     if(error){

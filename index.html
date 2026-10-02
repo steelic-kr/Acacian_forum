@@ -411,6 +411,18 @@
   }
   .modal-error.show{ display:block; }
 
+  .toast{
+    position: fixed; left: 50%; bottom: 24px; z-index: 100;
+    transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+    max-width: calc(100% - 32px);
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--amber); border-radius: 10px;
+    padding: 12px 16px; font-size: 14px; font-weight: 600;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    transition: opacity .2s ease, transform .2s ease;
+  }
+  .toast.show{ opacity: 1; transform: translate(-50%, 0); }
+
   @media (max-width: 520px){
     .rank-badge{ flex-basis:44px; height:44px; font-size:14px; }
     .toolbar.open-flex{ justify-content:stretch; }
@@ -517,7 +529,7 @@
     </div>
     <div class="field">
       <label for="level-creator">제작자 이름</label>
-      <input type="text" id="level-creator" placeholder="예: Endlevel">
+      <input type="text" id="level-creator" placeholder="예: 모과">
     </div>
     <div class="modal-actions">
       <button class="btn" type="button" onclick="closeAddLevelModal()">취소</button>
@@ -713,13 +725,27 @@
   let levels = [];
   let clears = [];
 
+  // Supabase는 요청 1번에 최대 1000행만 돌려주므로, 1000행씩 나눠서 전부 받아옴
+  const PAGE_SIZE = 1000;
+  async function fetchAllRows(table, columns){
+    const all = [];
+    for(let from = 0; ; from += PAGE_SIZE){
+      const { data, error } = await sb.from(table).select(columns)
+        .order('id', { ascending: true })            // 페이지가 겹치거나 빠지지 않도록 고정 정렬
+        .range(from, from + PAGE_SIZE - 1);
+      if(error) return { data: null, error };
+      all.push(...data);
+      if(data.length < PAGE_SIZE) return { data: all, error: null };
+    }
+  }
+
   let loadSeq = 0;
   async function loadData(){
     const mySeq = ++loadSeq;
-    // 맵과 클리어 기록을 동시에 받아옴
+    // 맵과 클리어 기록을 동시에, 1000행 제한 없이 끝까지 받아옴
     const [levelRes, clearRes] = await Promise.all([
-      sb.from('levels').select('id, rank, name, creator'),
-      sb.from('clears').select('id, level_id, name, device, video, detail')
+      fetchAllRows('levels', 'id, rank, name, creator'),
+      fetchAllRows('clears', 'id, level_id, name, device, video, detail')
     ]);
     // 더 최근에 시작된 불러오기가 있으면 이 결과는 버림 (오래된 데이터로 덮어쓰기 방지)
     if(mySeq !== loadSeq) return;
@@ -748,15 +774,47 @@
 
   // 관리자 작업 중복 실행 방지 (버튼 연타로 순위가 꼬이는 것 방지)
   let busy = false;
+  const BUSY_TIMEOUT_MS = 30000;
   async function runBusy(fn){
-    if(busy) return;
+    if(busy){
+      showToast('이전 작업을 처리하는 중입니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
     busy = true;
     document.body.style.cursor = 'progress';
-    try { await fn(); }
-    finally {
+    let timer;
+    const timeout = new Promise(resolve => {
+      timer = setTimeout(() => resolve('timeout'), BUSY_TIMEOUT_MS);
+    });
+    try {
+      const result = await Promise.race([fn(), timeout]);
+      if(result === 'timeout'){
+        showToast('서버 응답이 없습니다. 네트워크 상태를 확인하고 새로고침 후 다시 시도해주세요.');
+      }
+    } catch(e){
+      console.error(e);
+      showToast('오류가 발생했습니다: ' + (e && e.message ? e.message : e));
+    } finally {
+      clearTimeout(timer);
       busy = false;
       document.body.style.cursor = '';
     }
+  }
+
+  // 화면 하단 알림 메시지
+  let toastTimer = null;
+  function showToast(msg){
+    let el = document.getElementById('toast');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'toast';
+      el.className = 'toast';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
   }
 
   function rankColor(rank, minRank, maxRank){
@@ -1402,16 +1460,42 @@
       return;
     }
 
-    const { error } = await sb.from('clears').insert({
-      level_id: levelId, name, device, video, detail
+    await runBusy(async () => {
+      // 중복 등재 방지: 서버에서 이 맵의 최신 클리어 명단을 받아 같은 닉네임이 있는지 확인
+      // (대소문자·앞뒤 공백 차이는 같은 사람으로 간주)
+      const { data: existing, error: checkErr } = await sb
+        .from('clears').select('name').eq('level_id', levelId);
+      if(checkErr){
+        errorEl.textContent = '중복 확인 실패: ' + checkErr.message;
+        errorEl.classList.add('show');
+        return;
+      }
+      const norm = s => s.trim().toLowerCase();
+      const dup = (existing || []).find(c => norm(c.name) === norm(name));
+      if(dup){
+        const lv = levels.find(l => l.id === levelId);
+        errorEl.textContent = `이미 등재된 기록입니다: "${dup.name}" 님은 ${lv ? lv.name : '이 맵'}의 클리어 명단에 이미 있습니다.`;
+        errorEl.classList.add('show');
+        return;
+      }
+
+      const { data: inserted, error } = await sb.from('clears').insert({
+        level_id: levelId, name, device, video, detail
+      }).select('id');
+      if(error){
+        errorEl.textContent = '추가 실패: ' + error.message;
+        errorEl.classList.add('show');
+        return;
+      }
+      if(!inserted || !inserted.length){
+        // 로그인이 만료되면 오류 없이 저장이 거부될 수 있음
+        errorEl.textContent = '저장되지 않았습니다. 로그인이 만료되었을 수 있으니 로그아웃 후 다시 로그인해주세요.';
+        errorEl.classList.add('show');
+        return;
+      }
+      await loadData();
+      closeAddClearModal();
     });
-    if(error){
-      errorEl.textContent = '추가 실패: ' + error.message;
-      errorEl.classList.add('show');
-      return;
-    }
-    await loadData();
-    closeAddClearModal();
   }
 
   // 오버레이 바깥 클릭 시 닫기

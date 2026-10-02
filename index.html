@@ -868,10 +868,22 @@
   }
 
   /* ---------- 유저랭킹 ---------- */
+  // ---------- 점수 공식 (지수 감소) ----------
+  // 1위 = MAX_POINTS점, 순위가 한 칸 내려갈 때마다 일정한 비율로 감소.
+  // 마지막 순위 맵은 MAX_POINTS × LAST_RATIO 점이 되도록 맵 개수에 맞춰 감소율이 자동 조정됨.
+  //   LAST_RATIO를 작게 할수록 상위권 쏠림이 강해짐 (예: 0.05 → 마지막 15점, 0.1 → 마지막 30점)
+  const MAX_POINTS = 300;
+  const LAST_RATIO = 0.05;
+
+  // 소수점 한 자리로 반올림 / 표시
+  function round1(x){ return Math.round(x * 10) / 10; }
+  function fmtPts(x){ return x.toFixed(1) + '점'; }
+
   function mapScoreForRank(rank, totalMaps){
     if(totalMaps <= 0) return 0;
-    const reverseRank = totalMaps - rank + 1;
-    return Math.round(300 * (reverseRank / totalMaps));
+    if(totalMaps === 1) return MAX_POINTS;
+    const t = (rank - 1) / (totalMaps - 1);         // 1위 = 0, 마지막 = 1
+    return round1(MAX_POINTS * Math.pow(LAST_RATIO, t));
   }
 
   function computeUserStats(){
@@ -887,7 +899,7 @@
       if(!userMap[c.name]){
         userMap[c.name] = { name: c.name, total: 0, clears: [] };
       }
-      userMap[c.name].total += points;
+      userMap[c.name].total = round1(userMap[c.name].total + points);  // 소수 덧셈 오차 방지
       userMap[c.name].clears.push({
         levelName: lv.name, rank: lv.rank, video: c.video, device: c.device, points
       });
@@ -919,7 +931,7 @@
         <div class="rank-row">
           <div class="rank-position ${posClass}">#${pos}</div>
           <button type="button" class="rank-user-name" onclick="openProfileModal('${escapeHtml(u.name).replace(/'/g, "\\'")}')">${escapeHtml(u.name)}</button>
-          <div class="rank-score">${u.total}점</div>
+          <div class="rank-score">${fmtPts(u.total)}</div>
         </div>`;
     }).join('');
   }
@@ -932,7 +944,7 @@
 
     document.getElementById('profile-rank').textContent = '#' + pos;
     document.getElementById('profile-name').textContent = user.name;
-    document.getElementById('profile-score').textContent = user.total + '점';
+    document.getElementById('profile-score').textContent = fmtPts(user.total);
     document.getElementById('profile-clear-count').textContent = user.clears.length;
     document.getElementById('profile-rename-btn').style.display = isAdmin ? 'flex' : 'none';
 
@@ -947,7 +959,7 @@
           <span class="profile-clear-name">${escapeHtml(c.levelName)}</span>
           <span class="profile-clear-rank">#${c.rank}</span>
           <span class="profile-clear-device">${deviceLabel(c.device)}</span>
-          <span class="profile-clear-points">${c.points}점</span>
+          <span class="profile-clear-points">${fmtPts(c.points)}</span>
           ${videoBtn}
         </div>`;
     }).join('');

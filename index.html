@@ -516,7 +516,7 @@
     </div>
     <div class="field">
       <label for="level-creator">제작자 이름</label>
-      <input type="text" id="level-creator" placeholder="예: Endlevel">
+      <input type="text" id="level-creator" placeholder="예: 모과">
     </div>
     <div class="modal-actions">
       <button class="btn" type="button" onclick="closeAddLevelModal()">취소</button>
@@ -712,12 +712,22 @@
   let levels = [];
   let clears = [];
 
+  let loadSeq = 0;
   async function loadData(){
-    const { data: levelRows, error: levelErr } = await sb.from('levels').select('*');
-    const { data: clearRows, error: clearErr } = await sb.from('clears').select('*');
+    const mySeq = ++loadSeq;
+    // 맵과 클리어 기록을 동시에 받아옴
+    const [levelRes, clearRes] = await Promise.all([
+      sb.from('levels').select('id, rank, name, creator'),
+      sb.from('clears').select('id, level_id, name, device, video, detail')
+    ]);
+    // 더 최근에 시작된 불러오기가 있으면 이 결과는 버림 (오래된 데이터로 덮어쓰기 방지)
+    if(mySeq !== loadSeq) return;
 
+    const { data: levelRows, error: levelErr } = levelRes;
+    const { data: clearRows, error: clearErr } = clearRes;
     if(levelErr) console.error('레벨 불러오기 실패', levelErr);
     if(clearErr) console.error('클리어 기록 불러오기 실패', clearErr);
+    if(levelErr || clearErr) return;  // 실패 시 기존 화면 유지
 
     levels = (levelRows || []).map(r => ({ id: r.id, rank: r.rank, name: r.name, creator: r.creator }));
     clears = (clearRows || []).map(r => ({
@@ -726,6 +736,26 @@
     }));
 
     render();
+  }
+
+  // 실시간 변경 알림이 연달아 와도 잠시 모았다가 한 번만 다시 불러옴
+  let reloadTimer = null;
+  function scheduleReload(){
+    clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(loadData, 500);
+  }
+
+  // 관리자 작업 중복 실행 방지 (버튼 연타로 순위가 꼬이는 것 방지)
+  let busy = false;
+  async function runBusy(fn){
+    if(busy) return;
+    busy = true;
+    document.body.style.cursor = 'progress';
+    try { await fn(); }
+    finally {
+      busy = false;
+      document.body.style.cursor = '';
+    }
   }
 
   function rankColor(rank, minRank, maxRank){
@@ -1070,43 +1100,17 @@
   });
 
   /* ---------- 맵/클리어 삭제, 닉네임 변경 (Supabase 반영) ---------- */
+  // 순위 처리는 전부 Supabase DB 함수(rank-functions.sql)에서 요청 1번으로 처리합니다.
   function deleteLevel(id){
-    showConfirm('이 맵과 관련된 클리어 기록도 함께 제거됩니다. 계속할까요?', async () => {
-      const lv = levels.find(l => l.id === id);
-      const { error } = await sb.from('levels').delete().eq('id', id);
-      if(error){ console.error(error); return; }
-
-      // 삭제된 맵보다 순위가 낮았던(숫자가 큰) 맵들을 한 칸씩 앞으로 당겨서 빈 자리를 메움
-      if(lv){
-        const affected = levels.filter(l => l.id !== id && l.rank > lv.rank);
-        await Promise.all(affected.map(a =>
-          sb.from('levels').update({ rank: a.rank - 1 }).eq('id', a.id)
-        ));
+    showConfirm('이 맵과 관련된 클리어 기록도 함께 제거됩니다. 계속할까요?', () => runBusy(async () => {
+      const { error } = await sb.rpc('delete_level_compact', { p_id: id });
+      if(error){
+        console.error(error);
+        showConfirm('삭제 실패: ' + error.message, () => {});
+        return;
       }
-
       await loadData();
-    });
-  }
-
-  // 맵 순위를 이동시키고, 사이에 있는 맵들의 순위를 한 칸씩 밀어서 항상 1~N으로 유지합니다.
-  async function reorderLevel(lv, newRank){
-    const oldRank = lv.rank;
-    if(newRank === oldRank) return;
-
-    if(newRank < oldRank){
-      // newRank ~ oldRank-1 사이 맵들을 한 칸씩 뒤로(숫자 +1) 밀어냄
-      const affected = levels.filter(l => l.id !== lv.id && l.rank >= newRank && l.rank <= oldRank - 1);
-      await Promise.all(affected.map(a =>
-        sb.from('levels').update({ rank: a.rank + 1 }).eq('id', a.id)
-      ));
-    } else {
-      // oldRank+1 ~ newRank 사이 맵들을 한 칸씩 앞으로(숫자 -1) 당김
-      const affected = levels.filter(l => l.id !== lv.id && l.rank > oldRank && l.rank <= newRank);
-      await Promise.all(affected.map(a =>
-        sb.from('levels').update({ rank: a.rank - 1 }).eq('id', a.id)
-      ));
-    }
-    await sb.from('levels').update({ rank: newRank }).eq('id', lv.id);
+    }));
   }
 
   function openEditRankModal(id){
@@ -1122,77 +1126,50 @@
   function closeEditRankModal(){
     document.getElementById('edit-rank-modal-overlay').classList.remove('open');
   }
-  async function submitEditRank(){
-    const overlay = document.getElementById('edit-rank-modal-overlay');
-    const id = overlay.dataset.levelId;
-    const lv = levels.find(l => l.id === id);
-    const errorEl = document.getElementById('edit-rank-modal-error');
-    const maxAllowed = levels.length;
-    const name = document.getElementById('edit-level-name').value.trim();
-    const creator = document.getElementById('edit-level-creator').value.trim();
-    let newRank = parseInt(document.getElementById('edit-rank-input').value, 10);
+  function submitEditRank(){
+    return runBusy(async () => {
+      const id = document.getElementById('edit-rank-modal-overlay').dataset.levelId;
+      const errorEl = document.getElementById('edit-rank-modal-error');
+      const name = document.getElementById('edit-level-name').value.trim();
+      const creator = document.getElementById('edit-level-creator').value.trim();
+      const newRank = parseInt(document.getElementById('edit-rank-input').value, 10);
 
-    if(!lv || !name || !creator || !newRank || newRank < 1){
-      errorEl.textContent = '맵 이름, 제작자, 순위를 모두 올바르게 입력해주세요.';
-      errorEl.classList.add('show');
-      return;
-    }
-    if(newRank > maxAllowed) newRank = maxAllowed;
+      if(!id || !name || !creator || !newRank || newRank < 1){
+        errorEl.textContent = '맵 이름, 제작자, 순위를 모두 올바르게 입력해주세요.';
+        errorEl.classList.add('show');
+        return;
+      }
 
-    if(newRank !== lv.rank){
-      await reorderLevel(lv, newRank);
-    }
-    const { error } = await sb.from('levels').update({ name, creator }).eq('id', id);
-    if(error){
-      errorEl.textContent = '저장 실패: ' + error.message;
-      errorEl.classList.add('show');
-      return;
-    }
-    await loadData();
-    closeEditRankModal();
+      const { error } = await sb.rpc('update_level', {
+        p_id: id, p_name: name, p_creator: creator, p_new_rank: newRank
+      });
+      if(error){
+        errorEl.textContent = '저장 실패: ' + error.message;
+        errorEl.classList.add('show');
+        return;
+      }
+      await loadData();
+      closeEditRankModal();
+    });
   }
-  // 순위가 겹치는 맵이 생겼을 때 해소용: 이 맵과, 이 맵보다 아래(숫자가 큰) 맵들을 전부 한 칸씩 밀어냄
-  // (같은 순위를 가진 다른 맵은 그대로 두어, 겹침이 해소되도록 함)
-  async function pushLevelDown(id){
-    const lv = levels.find(l => l.id === id);
-    if(!lv) return;
-    const rank = lv.rank;
-    const affected = levels.filter(l => l.id !== id && l.rank > rank);
-    await Promise.all(affected.map(a =>
-      sb.from('levels').update({ rank: a.rank + 1 }).eq('id', a.id)
-    ));
-    await sb.from('levels').update({ rank: rank + 1 }).eq('id', id);
-    await loadData();
+
+  // 이 맵과 그 아래 맵들을 한 칸씩 밀기(+1, 중복 해소) / 올리기(-1, 공백 메우기)
+  function shiftFromLevel(delta){
+    return runBusy(async () => {
+      const id = document.getElementById('edit-rank-modal-overlay').dataset.levelId;
+      const errorEl = document.getElementById('edit-rank-modal-error');
+      const { error } = await sb.rpc('shift_from_level', { p_id: id, p_delta: delta });
+      if(error){
+        errorEl.textContent = '실패: ' + error.message;
+        errorEl.classList.add('show');
+        return;
+      }
+      await loadData();
+      closeEditRankModal();
+    });
   }
-  async function submitPushDown(){
-    const overlay = document.getElementById('edit-rank-modal-overlay');
-    const id = overlay.dataset.levelId;
-    await pushLevelDown(id);
-    closeEditRankModal();
-  }
-  // 순위 사이에 빈자리(공백)가 생겼을 때 해소용: 이 맵과, 이 맵보다 아래(숫자가 큰) 맵들을 전부 한 칸씩 끌어올림
-  async function pullLevelUp(id){
-    const lv = levels.find(l => l.id === id);
-    if(!lv) return;
-    const rank = lv.rank;
-    if(rank <= 1){
-      document.getElementById('edit-rank-modal-error').textContent = '이미 1위라 더 끌어올릴 수 없습니다.';
-      document.getElementById('edit-rank-modal-error').classList.add('show');
-      return;
-    }
-    const affected = levels.filter(l => l.id !== id && l.rank > rank);
-    await Promise.all(affected.map(a =>
-      sb.from('levels').update({ rank: a.rank - 1 }).eq('id', a.id)
-    ));
-    await sb.from('levels').update({ rank: rank - 1 }).eq('id', id);
-    await loadData();
-  }
-  async function submitPullUp(){
-    const overlay = document.getElementById('edit-rank-modal-overlay');
-    const id = overlay.dataset.levelId;
-    await pullLevelUp(id);
-    closeEditRankModal();
-  }
+  function submitPushDown(){ return shiftFromLevel(1); }
+  function submitPullUp(){ return shiftFromLevel(-1); }
 
   /* ---------- 순위 재정렬 (이름 목록 붙여넣기) ---------- */
   function openReorderModal(){
@@ -1245,19 +1222,17 @@
       return;
     }
 
-    // 순서대로 1위부터 순위 재부여 (바뀐 항목만 업데이트, 병렬 처리)
-    const updates = [];
-    for(let i = 0; i < orderedIds.length; i++){
-      const newRank = i + 1;
-      const lv = levels.find(l => l.id === orderedIds[i]);
-      if(lv.rank !== newRank){
-        updates.push(sb.from('levels').update({ rank: newRank }).eq('id', orderedIds[i]));
+    // 순서대로 1위부터 순위 재부여 (DB 함수로 요청 1번)
+    await runBusy(async () => {
+      const { error } = await sb.rpc('reorder_levels', { p_ids: orderedIds });
+      if(error){
+        errorEl.textContent = '재정렬 실패: ' + error.message;
+        errorEl.classList.add('show');
+        return;
       }
-    }
-    await Promise.all(updates);
-
-    await loadData();
-    closeReorderModal();
+      await loadData();
+      closeReorderModal();
+    });
   }
 
   function deleteClear(id){
@@ -1338,24 +1313,17 @@
       return;
     }
 
-    // 삽입 위치는 1 ~ (현재 맵 개수 + 1) 범위로 고정
-    const maxAllowed = levels.length + 1;
-    if(rank > maxAllowed) rank = maxAllowed;
-
-    // 새 맵이 들어갈 자리보다 순위가 같거나 낮은(숫자가 큰) 맵들은 한 칸씩 뒤로 밀려남
-    const toShift = levels.filter(lv => lv.rank >= rank);
-    await Promise.all(toShift.map(lv =>
-      sb.from('levels').update({ rank: lv.rank + 1 }).eq('id', lv.id)
-    ));
-
-    const { error } = await sb.from('levels').insert({ rank, name, creator });
-    if(error){
-      errorEl.textContent = '추가 실패: ' + error.message;
-      errorEl.classList.add('show');
-      return;
-    }
-    await loadData();
-    closeAddLevelModal();
+    // 기존 맵 밀어내기 + 삽입을 DB 함수로 요청 1번에 처리 (순위 범위 보정도 DB에서)
+    await runBusy(async () => {
+      const { error } = await sb.rpc('insert_level_at', { p_rank: rank, p_name: name, p_creator: creator });
+      if(error){
+        errorEl.textContent = '추가 실패: ' + error.message;
+        errorEl.classList.add('show');
+        return;
+      }
+      await loadData();
+      closeAddLevelModal();
+    });
   }
 
   /* ---------- 새 클리어 추가 ---------- */
@@ -1467,8 +1435,8 @@
     // 다른 방문자가 데이터를 추가/수정하면 자동으로 새로고침 (Realtime 활성화 시 동작)
     try{
       sb.channel('forum-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'levels' }, () => loadData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'clears' }, () => loadData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'levels' }, scheduleReload)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'clears' }, scheduleReload)
         .subscribe();
     }catch(e){ /* Realtime 미설정 시 무시 */ }
 
